@@ -2,309 +2,170 @@
 Documentation Alignment Tests
 
 These tests verify that documentation matches actual code implementation.
-Prevents drift where docs claim functions/flows that don't match reality.
+Prevents drift where docs claim files, models, or flows that don't exist.
 
 Run: pytest tests/test_documentation_alignment.py -v
 """
 
-import pytest
 import os
 import re
 import inspect
 
+import pytest
+
+
+README = "README.md"
+DOCS_DIR = "docs"
+KEPT_DOCS = [
+    "docs/README.md",
+    "docs/GLOSSARY.md",
+    "docs/EXTERNAL_SERVICES.md",
+    "docs/LANGSMITH.md",
+    "docs/OBSERVABILITY.md",
+]
+
+
+def _read(path):
+    with open(path, encoding="utf-8") as f:
+        return f.read()
+
+
+class TestReadmeAlignment:
+    """The README is the front door — its claims must match the code."""
+
+    def test_readme_exists_and_links_live_site(self):
+        content = _read(README)
+        assert "noahdelacalzada.com" in content, "README must link the live demo"
+        assert "portfolia_frontend" in content, "README must link the frontend repo"
+
+    def test_readme_embedding_model_matches_code(self):
+        """The embedding model named in the README is the one the retriever uses."""
+        readme = _read(README)
+        retriever_src = _read("assistant/retrieval/pgvector_retriever.py")
+
+        code_models = set(re.findall(r"text-embedding-[\w.-]+", retriever_src))
+        assert code_models, "Expected an embedding model in pgvector_retriever.py"
+        for model in code_models:
+            assert model in readme, (
+                f"Retriever uses '{model}' but the README doesn't mention it. "
+                "Update the README stack section."
+            )
+
+    def test_readme_rpc_name_matches_code(self):
+        """The Supabase RPC named in the README exists in the retrieval code."""
+        readme = _read(README)
+        rpc_names = re.findall(r"`(match_[a-z_]+)`", readme)
+        assert rpc_names, "README should name the vector-search RPC"
+        retriever_src = _read("assistant/retrieval/pgvector_retriever.py")
+        for rpc in set(rpc_names):
+            assert rpc in retriever_src, (
+                f"README names RPC '{rpc}' but pgvector_retriever.py doesn't use it."
+            )
+
+    def test_readme_file_references_exist(self):
+        """Every repo-relative path the README cites must exist."""
+        readme = _read(README)
+        # Paths in backticks or markdown links, e.g. `api/main.py`, [x](data/)
+        candidates = set(
+            re.findall(r"[`(]((?:assistant|api|data|docs|scripts|supabase|tests)/[\w./-]*)", readme)
+        ) | set(re.findall(r"`((?:chat_with_portfolia\.py|Dockerfile|LICENSE|\.env\.example))`", readme))
+        missing = [p for p in candidates if not os.path.exists(p.rstrip(")"))]
+        assert not missing, f"README references nonexistent paths: {sorted(missing)}"
+
+    def test_readme_quickstart_commands_reference_real_entrypoints(self):
+        readme = _read(README)
+        assert "uvicorn api.main:app" in readme
+        assert os.path.exists("api/main.py")
+        assert "chat_with_portfolia.py" in readme
+        assert os.path.exists("chat_with_portfolia.py")
+
 
 class TestConversationFlowAlignment:
-    """Verify conversation pipeline docs match actual code."""
+    """Pipeline concepts the README sells must exist in the orchestrator."""
 
-    def test_conversation_flow_documented_correctly(self):
-        """SYSTEM_ARCHITECTURE_SUMMARY describes actual pipeline nodes."""
+    def test_pipeline_concepts_documented(self):
+        readme = _read(README).lower()
+        for concept in ["intent", "retrieval", "generation", "pgvector"]:
+            assert concept in readme, f"Core concept '{concept}' missing from README"
 
-        # Read master documentation
-        doc_path = "docs/context/SYSTEM_ARCHITECTURE_SUMMARY.md"
-        with open(doc_path) as f:
-            doc_content = f.read()
-
-        # Get actual pipeline from code
+    def test_orchestrator_is_a_pipeline(self):
         from assistant.flows.conversation_flow import run_conversation_flow
+
         source = inspect.getsource(run_conversation_flow)
-
-        # Expected core pipeline stages documented in SYSTEM_ARCHITECTURE_SUMMARY
-        # These match the conceptual flow described in the docs
-        documented_pipeline_stages = [
-            "retrieve",      # retrieve_chunks in docs
-            "generate",      # generate_answer in docs
-            "plan",          # plan_actions in docs
-            "execute",       # execute_actions in docs
-        ]
-
-        # Verify core pipeline concepts are documented
-        for stage in documented_pipeline_stages:
-            assert stage in doc_content.lower(), (
-                f"Core pipeline stage '{stage}' not documented in {doc_path}. "
-                f"Update docs to match implementation."
-            )
-
-        # Verify we're using a pipeline-based approach (functional or LangGraph)
-        assert "pipeline" in source.lower() or "workflow" in source.lower() or "langgraph" in source.lower(), (
-            "Expected pipeline/workflow pattern in conversation_flow.py source."
+        assert "pipeline" in source.lower(), (
+            "Expected a pipeline pattern in conversation_flow.py"
         )
 
 
-class TestCodeReferenceValidity:
-    """Verify file paths mentioned in docs actually exist."""
+class TestDocsIntegrity:
+    """The kept reference docs exist, are non-trivial, and are indexed."""
 
-    def test_documentation_file_references_valid(self):
-        """All src/*.py references in docs point to existing files."""
+    def test_kept_docs_exist_and_not_empty(self):
+        for doc in KEPT_DOCS:
+            assert os.path.exists(doc), f"Missing doc: {doc}"
+            assert len(_read(doc)) > 500, f"{doc} is too short to be a real reference"
 
-        doc_files = [
-            "docs/context/SYSTEM_ARCHITECTURE_SUMMARY.md",
-            "docs/context/DATA_COLLECTION_AND_SCHEMA_REFERENCE.md",
-            "docs/CONVERSATION_PIPELINE_MODULES.md",
-        ]
-
-        # Add RAG_ENGINE.md if it exists
-        if os.path.exists("docs/RAG_ENGINE.md"):
-            doc_files.append("docs/RAG_ENGINE.md")
-
-        invalid_references = []
-
-        for doc_file in doc_files:
-            if not os.path.exists(doc_file):
-                continue  # Skip if doc doesn't exist
-
-            with open(doc_file) as f:
-                content = f.read()
-
-            # Find references like "src/flows/core_nodes.py"
-            file_refs = re.findall(r'src/[\w/]+\.py', content)
-
-            for ref in set(file_refs):  # Use set to avoid duplicate checks
-                if not os.path.exists(ref):
-                    line_num = content[:content.find(ref)].count('\n') + 1
-                    invalid_references.append({
-                        "doc": doc_file,
-                        "reference": ref,
-                        "line": line_num
-                    })
-
-        assert len(invalid_references) == 0, (
-            f"Found {len(invalid_references)} invalid file references:\n" +
-            "\n".join([
-                f"  {inv['doc']} line {inv['line']}: {inv['reference']}"
-                for inv in invalid_references
-            ]) +
-            "\n\nUpdate documentation to reference correct files."
-        )
-
-    def test_test_file_references_valid(self):
-        """All tests/*.py references in docs point to existing files."""
-
-        doc_files = [
-            "docs/QA_STRATEGY.md",
-        ]
-
-        invalid_references = []
-
-        for doc_file in doc_files:
-            if not os.path.exists(doc_file):
+    def test_docs_index_covers_all_docs(self):
+        """Every markdown file in docs/ is linked from docs/README.md."""
+        index = _read("docs/README.md")
+        for name in sorted(os.listdir(DOCS_DIR)):
+            if not name.endswith(".md") or name == "README.md":
                 continue
-
-            with open(doc_file) as f:
-                content = f.read()
-
-            # Find references like "tests/test_conversation_quality.py"
-            file_refs = re.findall(r'tests/[\w/]+\.py', content)
-
-            for ref in set(file_refs):
-                if not os.path.exists(ref):
-                    line_num = content[:content.find(ref)].count('\n') + 1
-                    invalid_references.append({
-                        "doc": doc_file,
-                        "reference": ref,
-                        "line": line_num
-                    })
-
-        assert len(invalid_references) == 0, (
-            f"Found {len(invalid_references)} invalid test file references:\n" +
-            "\n".join([
-                f"  {inv['doc']} line {inv['line']}: {inv['reference']}"
-                for inv in invalid_references
-            ])
-        )
-
-
-class TestRoleConsistency:
-    """Verify role names match between docs and code."""
-
-    def test_role_names_documented(self):
-        """Roles in PROJECT_REFERENCE_OVERVIEW match actual role definitions."""
-
-        # Get documented roles
-        doc_path = "docs/context/PROJECT_REFERENCE_OVERVIEW.md"
-        with open(doc_path) as f:
-            doc_content = f.read()
-
-        # Expected roles from documentation context
-        expected_roles = [
-            "Software Developer",
-            "Hiring Manager (technical)",
-            "Hiring Manager (nontechnical)",
-        ]
-
-        for role in expected_roles:
-            # Normalize variations in documentation (handles different dash types)
-            role_variations = [
-                role,
-                role.replace("nontechnical", "non-technical"),
-                role.replace("nontechnical", "non‑technical"),  # en-dash
-            ]
-            found = any(variation in doc_content for variation in role_variations)
-            assert found, (
-                f"Role '{role}' not documented in {doc_path}. "
-                f"Add role description to master docs."
+            assert name in index, (
+                f"docs/{name} is not listed in docs/README.md — add it to the index "
+                "or delete the file."
             )
 
 
-class TestConfigurationValues:
-    """Verify configuration values in docs match code."""
+class TestNoStaleTechReferences:
+    """Docs must not describe the retired stack (Streamlit UI, GPT generation, src/)."""
 
-    def test_temperature_setting_documented_correctly(self):
-        """Temperature value in docs matches RAG factory."""
+    FORBIDDEN = [
+        r"streamlit run",
+        r"\bsrc/",
+        r"gpt-3\.5",
+        r"gpt-4o",
+        r"FAISS_CAREER_PATH",
+        r"SUPABASE_SERVICE_KEY=",
+    ]
 
-        # Get documented temperature
-        doc_path = "docs/context/SYSTEM_ARCHITECTURE_SUMMARY.md"
-        with open(doc_path) as f:
-            doc_content = f.read()
-
-        temp_match = re.search(r'temperature[:\s]+(\d+\.?\d*)', doc_content)
-        if not temp_match:
-            pytest.skip("Temperature not explicitly documented (may be described differently)")
-
-        documented_temp = float(temp_match.group(1))
-
-        # Get actual temperature from code
-        from assistant.core.rag_factory import RagEngineFactory
-        source = inspect.getsource(RagEngineFactory.create_llm)
-
-        code_temp_match = re.search(r'temperature=(\d+\.?\d*)', source)
-        if not code_temp_match:
-            pytest.fail("Temperature not found in RagEngineFactory.create_llm")
-
-        actual_temp = float(code_temp_match.group(1))
-
-        assert documented_temp == actual_temp, (
-            f"Temperature mismatch: docs say {documented_temp}, "
-            f"code uses {actual_temp}. Update {doc_path} to match "
-            f"src/core/rag_factory.py"
-        )
-
-    def test_embedding_model_documented(self):
-        """Embedding model name in docs matches code."""
-
-        doc_path = "docs/context/SYSTEM_ARCHITECTURE_SUMMARY.md"
-        with open(doc_path) as f:
-            doc_content = f.read()
-
-        # Check for text-embedding-3-small mention
-        assert "text-embedding-3-small" in doc_content, (
-            f"Embedding model 'text-embedding-3-small' not documented in {doc_path}. "
-            f"This is the current model used in production."
-        )
+    def test_readme_and_docs_have_no_stale_references(self):
+        offenders = []
+        for path in [README, *KEPT_DOCS, "CONTRIBUTING.md", "CLAUDE.md", ".env.example"]:
+            content = _read(path)
+            for pattern in self.FORBIDDEN:
+                if re.search(pattern, content, re.IGNORECASE):
+                    offenders.append(f"{path}: /{pattern}/")
+        assert not offenders, "Stale tech references found:\n" + "\n".join(offenders)
 
 
-class TestMasterDocsIntegrity:
-    """Verify master documentation files exist and are complete."""
+class TestEnvExampleAlignment:
+    """.env.example documents the variables the config layer actually requires."""
 
-    def test_all_master_docs_exist(self):
-        """All 4 master docs in docs/context/ are present."""
-
-        required_docs = [
-            "docs/context/PROJECT_REFERENCE_OVERVIEW.md",
-            "docs/context/SYSTEM_ARCHITECTURE_SUMMARY.md",
-            "docs/context/DATA_COLLECTION_AND_SCHEMA_REFERENCE.md",
-            "docs/context/CONVERSATION_PERSONALITY.md",
-        ]
-
-        missing = [doc for doc in required_docs if not os.path.exists(doc)]
-
-        assert len(missing) == 0, (
-            f"Missing master documentation files: {missing}\n"
-            f"These are source-of-truth documents required for system understanding."
-        )
-
-    def test_master_docs_not_empty(self):
-        """Master docs have meaningful content (>500 chars each)."""
-
-        master_docs = [
-            "docs/context/PROJECT_REFERENCE_OVERVIEW.md",
-            "docs/context/SYSTEM_ARCHITECTURE_SUMMARY.md",
-            "docs/context/DATA_COLLECTION_AND_SCHEMA_REFERENCE.md",
-            "docs/context/CONVERSATION_PERSONALITY.md",
-        ]
-
-        for doc_path in master_docs:
-            with open(doc_path) as f:
-                content = f.read()
-
-            assert len(content) > 500, (
-                f"{doc_path} is too short ({len(content)} chars). "
-                f"Master docs should be comprehensive."
+    def test_required_vars_present(self):
+        example = _read(".env.example")
+        for var in [
+            "OPENAI_API_KEY",
+            "ANTHROPIC_API_KEY",
+            "SUPABASE_URL",
+            "SUPABASE_SERVICE_ROLE_KEY",
+        ]:
+            assert re.search(rf"^{var}=", example, re.MULTILINE), (
+                f"{var} missing from .env.example — the code requires it."
             )
-
-
-class TestQADocumentation:
-    """Verify QA documentation is accurate and up-to-date."""
-
-    def test_qa_strategy_exists(self):
-        """QA_STRATEGY.md exists and describes testing approach."""
-
-        assert os.path.exists("docs/QA_STRATEGY.md"), (
-            "docs/QA_STRATEGY.md not found. This should document testing strategy."
-        )
-
-        with open("docs/QA_STRATEGY.md") as f:
-            content = f.read()
-
-        # Check for key sections
-        assert "Documentation Alignment Testing" in content, (
-            "QA_STRATEGY.md should include documentation alignment testing section"
-        )
-
-        assert "test_documentation_alignment.py" in content, (
-            "QA_STRATEGY.md should reference this test file"
-        )
-
-    def test_test_count_documented_correctly(self):
-        """Test count in docs matches actual implemented tests."""
-
-        # This test verifies the QA docs mention the correct number of tests
-        # Skip if not critical to keep passing during development
-        pytest.skip("Test count changes frequently during development")
 
 
 class TestChangelogIntegrity:
-    """Verify CHANGELOG.md exists and is structured correctly."""
+    """CHANGELOG.md exists and is structured correctly."""
 
     def test_changelog_exists(self):
-        """CHANGELOG.md exists in root directory."""
+        assert os.path.exists("CHANGELOG.md")
 
-        assert os.path.exists("CHANGELOG.md"), (
-            "CHANGELOG.md not found in root. This should track all changes."
-        )
-
-    def test_changelog_has_recent_entries(self):
-        """CHANGELOG.md has entries (not empty or stub)."""
-
-        with open("CHANGELOG.md") as f:
-            content = f.read()
-
-        assert len(content) > 1000, (
-            "CHANGELOG.md seems incomplete. Should have detailed entries."
-        )
-
-        # Check for date format entries
-        assert re.search(r'\[20\d{2}-\d{2}-\d{2}\]', content), (
-            "CHANGELOG.md should have dated entries like [2025-10-16]"
+    def test_changelog_has_dated_entries(self):
+        content = _read("CHANGELOG.md")
+        assert len(content) > 1000, "CHANGELOG.md seems incomplete"
+        assert re.search(r"\[20\d{2}-\d{2}(-\d{2})?\]", content), (
+            "CHANGELOG.md should have dated entries like [2026-07-04]"
         )
 
 
