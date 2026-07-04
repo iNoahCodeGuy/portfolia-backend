@@ -3,3 +3,23 @@ name = "portfolia-backend"
 version = "1.0.0"
 description = "Noah's RAG-powered AI portfolio assistant — FastAPI backend"
 requires-python = ">=3.12"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# Hermetic by default: live evals (real API calls, real cost) are opt-in
+# via `pytest -m live`.
+addopts = "-m 'not live'"
+markers = [
+    "live: hits real OpenAI/Anthropic/Supabase APIs — costs money, needs .env",
+    "slow: takes more than a few seconds",
+    "integration: exercises multiple components together",
+    "unit: isolated unit test",
+    "performance: performance benchmark",
+]
+
+[tool.coverage.run]
+source = ["assistant", "api"]
+omit = ["*/__pycache__/*"]
+
+[tool.coverage.report]
+skip_empty = true

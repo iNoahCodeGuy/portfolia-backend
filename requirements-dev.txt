@@ -1,0 +1,4 @@
+# Development/test tooling — not needed in production images.
+pytest==8.4.2
+pytest-cov==7.0.0
+pre-commit==4.3.0

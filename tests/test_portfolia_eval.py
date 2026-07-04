@@ -28,8 +28,22 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# Initialize OpenAI for LLM-as-judge evaluations
-openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+# Live-eval suite: hits real OpenAI/Anthropic/Supabase and costs money.
+# Deselected by default (see pyproject addopts); run with: pytest -m live
+pytestmark = pytest.mark.live
+
+# Lazily initialized so collection never requires an API key
+_openai_client = None
+
+
+def get_openai_client() -> OpenAI:
+    global _openai_client
+    if _openai_client is None:
+        api_key = os.getenv("OPENAI_API_KEY")
+        if not api_key:
+            pytest.skip("OPENAI_API_KEY required for live evals")
+        _openai_client = OpenAI(api_key=api_key)
+    return _openai_client
 
 # Track results for summary
 intent_results = []
@@ -130,7 +144,7 @@ Respond with ONLY valid JSON in this exact format:
 def evaluate_response_quality(user_message: str, response: str) -> Dict[str, Any]:
     """Use LLM-as-judge to evaluate response quality."""
     try:
-        completion = openai_client.chat.completions.create(
+        completion = get_openai_client().chat.completions.create(
             model="gpt-4o",
             messages=[
                 {"role": "system", "content": "You are an expert evaluator of AI assistant responses. Return only valid JSON."},
