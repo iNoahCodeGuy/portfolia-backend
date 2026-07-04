@@ -77,6 +77,20 @@ export async function GET() {
       last_active_at: r.last_active_at,
     }))
 
+    // Fetch recruiter leads
+    const { data: leads } = await supabase
+      .from('recruiter_leads')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(20)
+
+    // Fetch crush confessions
+    const { data: crushes } = await supabase
+      .from('crush_confessions')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(20)
+
     return NextResponse.json({
       totalConversations,
       avgTurns,
@@ -87,6 +101,23 @@ export async function GET() {
       projectCounts,
       depthDistribution: depthDist,
       recent,
+      leads: (leads || []).map(l => ({
+        name: l.name,
+        email: l.email,
+        phone: l.phone,
+        company: l.company,
+        referral_source: l.referral_source,
+        message: l.message,
+        visitor_type: l.visitor_type,
+        created_at: l.created_at,
+      })),
+      crushes: (crushes || []).map(c => ({
+        anonymous: c.anonymous,
+        name: c.name,
+        contact: c.contact,
+        message: c.message,
+        created_at: c.created_at,
+      })),
     })
   } catch (error) {
     console.error('Analytics API error:', error)

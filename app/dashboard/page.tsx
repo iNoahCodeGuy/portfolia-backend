@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import {
   MessageSquare, Users, Target, TrendingUp,
   BarChart3, Layers, Clock, ArrowLeft, RefreshCw,
-  ChevronDown, ChevronUp
+  ChevronDown, ChevronUp, Heart, UserCheck
 } from 'lucide-react'
 import Link from 'next/link'
 
@@ -29,6 +29,23 @@ interface Analytics {
     max_depth: number
     started_at: string
     last_active_at: string
+  }>
+  leads: Array<{
+    name: string | null
+    email: string | null
+    phone: string | null
+    company: string | null
+    referral_source: string | null
+    message: string | null
+    visitor_type: string
+    created_at: string
+  }>
+  crushes: Array<{
+    anonymous: boolean
+    name: string | null
+    contact: string | null
+    message: string | null
+    created_at: string
   }>
 }
 
@@ -397,6 +414,87 @@ export default function Dashboard() {
                           View full transcript →
                         </button>
                       </div>
+                    )}
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+        {/* Leads & Crushes */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Recruiter Leads */}
+          <div className="bg-chat-surface border border-chat-border rounded-2xl p-6">
+            <div className="flex items-center gap-2 mb-5">
+              <UserCheck className="w-4 h-4 text-green-400" />
+              <h2 className="font-semibold text-white text-sm">Captured Leads</h2>
+              <span className="text-xs text-gray-500 ml-auto">{data.leads.length} total</span>
+            </div>
+            <div className="space-y-3 max-h-[400px] overflow-y-auto">
+              {data.leads.length === 0 ? (
+                <p className="text-gray-500 text-sm text-center py-8">No leads captured yet</p>
+              ) : (
+                data.leads.map((lead, i) => (
+                  <div key={i} className="bg-chat-bg border border-chat-border/50 rounded-xl p-4 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium text-white">
+                        {lead.name || 'No name'}
+                      </span>
+                      <span className="text-xs text-gray-500">
+                        {new Date(lead.created_at).toLocaleDateString()}
+                      </span>
+                    </div>
+                    {lead.company && (
+                      <p className="text-xs text-gray-400">{lead.company}</p>
+                    )}
+                    <div className="flex flex-wrap gap-2 text-xs">
+                      {lead.email && (
+                        <a href={`mailto:${lead.email}`} className="text-chat-primary hover:text-chat-secondary transition-colors">
+                          {lead.email}
+                        </a>
+                      )}
+                      {lead.phone && (
+                        <span className="text-gray-400">{lead.phone}</span>
+                      )}
+                    </div>
+                    {lead.referral_source && (
+                      <p className="text-xs text-gray-500">Found via: {lead.referral_source}</p>
+                    )}
+                    {lead.message && (
+                      <p className="text-xs text-gray-400 italic truncate">{lead.message}</p>
+                    )}
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+
+          {/* Crush Confessions */}
+          <div className="bg-chat-surface border border-chat-border rounded-2xl p-6">
+            <div className="flex items-center gap-2 mb-5">
+              <Heart className="w-4 h-4 text-pink-400" />
+              <h2 className="font-semibold text-white text-sm">Crush Confessions</h2>
+              <span className="text-xs text-gray-500 ml-auto">{data.crushes.length} total</span>
+            </div>
+            <div className="space-y-3 max-h-[400px] overflow-y-auto">
+              {data.crushes.length === 0 ? (
+                <p className="text-gray-500 text-sm text-center py-8">No confessions yet</p>
+              ) : (
+                data.crushes.map((crush, i) => (
+                  <div key={i} className="bg-chat-bg border border-chat-border/50 rounded-xl p-4 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium text-white">
+                        {crush.anonymous ? 'Anonymous' : (crush.name || 'No name')}
+                      </span>
+                      <span className="text-xs text-gray-500">
+                        {new Date(crush.created_at).toLocaleDateString()}
+                      </span>
+                    </div>
+                    {!crush.anonymous && crush.contact && (
+                      <p className="text-xs text-gray-400">{crush.contact}</p>
+                    )}
+                    {crush.message && (
+                      <p className="text-xs text-gray-300 italic">{crush.message}</p>
                     )}
                   </div>
                 ))

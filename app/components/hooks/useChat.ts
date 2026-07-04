@@ -7,6 +7,7 @@ export type Role =
   | 'Hiring Manager (technical)'
   | 'Software Developer'
   | 'Just looking around'
+  | 'How I relate to Enterprise AI'
   | "Looking to confess I've had a crush on Noah for years"
 
 export interface Message {
