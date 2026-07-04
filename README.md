@@ -79,7 +79,7 @@ uvicorn api.main:app --reload --port 8000
 
 The API is a single endpoint: `POST /chat` with
 `{"message": "...", "session_id": "...", "role": "..."}` — the same contract the live
-frontend uses.
+frontend uses. Full request/response reference: [api/README.md](api/README.md).
 
 Terminal client commands: `/quit` exit · `/clear` reset conversation · `/debug` toggle
 pipeline debug output.

@@ -1,169 +1,58 @@
-# API Routes
+# api/
 
-Vercel serverless functions for Noah's AI Assistant.
+FastAPI app serving the Portfolia backend. Production runs this on Railway via the
+repo's [Dockerfile](../Dockerfile); the deployed frontend
+([portfolia_frontend](https://github.com/iNoahCodeGuy/portfolia_frontend)) calls it at
+`${NEXT_PUBLIC_API_URL}/chat`.
 
-## Endpoints
-
-### POST /api/chat
-Execute LangGraph conversation flow and return response.
-
-**Request:**
-```json
-{
-  "query": "What is your experience with Python?",
-  "role": "Hiring Manager (technical)",
-  "session_id": "user-123",
-  "chat_history": [
-    {"role": "user", "content": "Hello"},
-    {"role": "assistant", "content": "Hi! How can I help?"}
-  ],
-  "user_email": "recruiter@example.com",
-  "user_name": "Jane Doe",
-  "user_phone": "+15551234567"
-}
-```
-
-**Response:**
-```json
-{
-  "success": true,
-  "answer": "I have extensive Python experience...",
-  "role": "Hiring Manager (technical)",
-  "session_id": "user-123",
-  "analytics": {
-    "latency_ms": 1250,
-    "tokens_used": 450
-  },
-  "actions_taken": ["send_resume", "notify_resume_sent"],
-  "retrieved_chunks": 4
-}
-```
-
-### POST /api/email
-Send resume or LinkedIn link via email.
-
-**Request:**
-```json
-{
-  "type": "resume",
-  "to_email": "recruiter@example.com",
-  "to_name": "Jane Doe",
-  "message": "Here's my resume as requested"
-}
-```
-
-**Response:**
-```json
-{
-  "success": true,
-  "type": "resume",
-  "status": "sent",
-  "resume_url": "https://storage.example.com/resume.pdf?token=..."
-}
-```
-
-### POST /api/feedback
-Submit user feedback and contact requests.
-
-**Request:**
-```json
-{
-  "message_id": "msg_123",
-  "rating": 5,
-  "comment": "Very helpful assistant!",
-  "contact_requested": true,
-  "user_email": "user@example.com",
-  "user_name": "John Smith",
-  "user_phone": "+15559876543"
-}
-```
-
-**Response:**
-```json
-{
-  "success": true,
-  "feedback_id": "fb_456",
-  "message": "Feedback received. Noah will reach out soon!"
-}
-```
-
-### POST /api/confess
-Submit anonymous or named confession.
-
-**Request:**
-```json
-{
-  "message": "I think you're amazing and wanted to tell you!",
-  "is_anonymous": false,
-  "name": "Sarah",
-  "email": "sarah@example.com",
-  "phone": "+15551112222"
-}
-```
-
-**Response:**
-```json
-{
-  "success": true,
-  "confession_id": "conf_789",
-  "message": "Thank you Sarah! Noah will reach out soon. 💌"
-}
-```
-
-## Local Testing
+## Run locally
 
 ```bash
-# Install Vercel CLI
-npm i -g vercel
-
-# Run locally
-vercel dev
-
-# Test endpoints
-curl -X POST http://localhost:3000/api/chat \
-  -H "Content-Type: application/json" \
-  -d '{"query": "Hello", "role": "Just looking around"}'
+uvicorn api.main:app --reload --port 8000
 ```
 
-## Deployment
+## Endpoint
 
-```bash
-# Deploy to Vercel
-vercel --prod
+### `POST /chat`
 
-# Set environment variables
-vercel env add OPENAI_API_KEY
-vercel env add SUPABASE_URL
-vercel env add SUPABASE_SERVICE_KEY
-# ... add all required env vars
-```
-
-## Error Handling
-
-All endpoints return consistent error format:
+Request body (all fields optional — sensible defaults apply):
 
 ```json
 {
-  "success": false,
-  "error": "Error message description"
+  "message": "What is Noah's professional background?",
+  "session_id": "any-stable-string",
+  "role": "Learn more about Noah",
+  "chat_history": [{"role": "user", "content": "..."}]
 }
 ```
 
-Common status codes:
-- `400` - Bad request (missing/invalid fields)
-- `500` - Internal server error
-- `200` - Success
+- `message` — the user's text. Welcome-button labels (e.g. `"See what Noah has built"`)
+  are recognized and mapped to the pipeline's menu options. `query` is accepted as an
+  alias for `message`.
+- `session_id` — omit to have one generated; reuse it to continue a conversation.
+- `role` — welcome-button context; falls back to the session's stored role.
+- `chat_history` — optional stateless mode: pass the full history each turn and no
+  server-side session state is relied upon.
 
-## Rate Limiting
+Response:
 
-Vercel free tier limits:
-- 100GB bandwidth/month
-- 100 hours serverless execution/month
-- 1000 invocations/day per function
+```json
+{
+  "success": true,
+  "response": "…the assistant's answer…",
+  "answer": "…mirror of response (the field the frontend reads)…",
+  "session_id": "any-stable-string"
+}
+```
 
-For production, upgrade to Pro plan or implement custom rate limiting.
+On pipeline errors the endpoint still returns 200 with `"success": false` and a generic
+message — the frontend renders it as a normal bubble.
 
-## CORS
+## Notes
 
-All endpoints support CORS for cross-origin requests from approved domains.
-Adjust CORS headers in each handler as needed for production security.
+- Sessions are held in an in-memory dict, so they reset on redeploy and don't share
+  across instances. The frontend's stateless `chat_history` mode is the durable path.
+- CORS: `FRONTEND_URL` (env) is added to the allow-list alongside `localhost:3000`.
+- The heavy lifting happens in `assistant/flows/conversation_flow.py`
+  (`run_conversation_flow`) — this module is just transport, session glue, and
+  menu-button mapping.

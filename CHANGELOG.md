@@ -9,6 +9,23 @@ All notable changes to Portfolia are documented here. The format is based on
 
 ---
 
+## [2026-07-04] — One deployment story (Phase 3)
+
+### Removed
+- Dead Vercel/Next.js deployment target: the in-repo Next.js app (a stale copy of the
+  deployed frontend), Vercel Python serverless handlers, `vercel.json`, `runtime.txt`,
+  `.railwayignore`, and their orphaned scripts/tests
+- Dead Streamlit tree (`assistant/main.py`, `assistant/ui/`, `assistant/integration/`)
+  and the test files that imported it
+
+### Changed
+- Dockerfile no longer copies `.env` into the image; ships `data/` (read by the RAG
+  factory at startup); `.dockerignore` added
+- Python version declared once: 3.12 (`.python-version`, `pyproject.toml`)
+- `api/README.md` rewritten against the actual `POST /chat` contract
+
+---
+
 ## [2026-07-04] — Repo professionalization (Phases 1–2)
 
 ### Added
