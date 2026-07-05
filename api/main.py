@@ -7,12 +7,14 @@ Run locally with:
 import logging
 import os
 import sys
+import time
 import traceback
 import uuid
+from collections import defaultdict, deque
 from copy import deepcopy
-from typing import Optional, List, Dict
+from typing import Deque, Dict, List, Optional
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
@@ -58,6 +60,37 @@ sessions: dict[str, dict] = {}
 rag_engine = RagEngine()
 
 
+# --- Abuse guards ---
+# Every /chat call triggers an embedding + two LLM calls, so unbounded
+# anonymous traffic is unbounded spend. Sliding-window limiter per client
+# IP; in-memory is correct for the single-instance Railway deployment
+# (upgrade path: Upstash/Redis if this ever scales horizontally).
+MAX_MESSAGE_CHARS = 4000
+RATE_LIMIT_REQUESTS = 20
+RATE_LIMIT_WINDOW_SECONDS = 60
+
+_request_log: Dict[str, Deque[float]] = defaultdict(deque)
+
+
+def _client_ip(request: Request) -> str:
+    forwarded = request.headers.get("x-forwarded-for")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
+
+
+def _rate_limited(ip: str) -> bool:
+    """Record this request; True if the client exceeded the window limit."""
+    now = time.time()
+    log = _request_log[ip]
+    while log and now - log[0] > RATE_LIMIT_WINDOW_SECONDS:
+        log.popleft()
+    if len(log) >= RATE_LIMIT_REQUESTS:
+        return True
+    log.append(now)
+    return False
+
+
 # --- Request / Response models ---
 class ChatRequest(BaseModel):
     message: Optional[str] = None
@@ -98,10 +131,22 @@ ROLE_MAP = {
 
 # Use sync def so FastAPI runs it in a threadpool (run_conversation_flow is blocking I/O)
 @app.post("/chat")
-def chat(req: ChatRequest):
+def chat(req: ChatRequest, request: Request):
+    # Abuse guards run before any embedding/LLM call is possible
+    if _rate_limited(_client_ip(request)):
+        raise HTTPException(
+            status_code=429,
+            detail="Too many requests — give it a minute and try again.",
+        )
+
+    user_message = req.message or req.query or ""
+    if len(user_message) > MAX_MESSAGE_CHARS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Message too long (max {MAX_MESSAGE_CHARS} characters).",
+        )
+
     try:
-        # Accept both "message" and "query" field names
-        user_message = req.message or req.query or ""
         session_id = req.session_id or str(uuid.uuid4())
 
         # Retrieve or create session state
