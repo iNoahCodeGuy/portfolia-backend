@@ -9,6 +9,28 @@ All notable changes to Portfolia are documented here. The format is based on
 
 ---
 
+## [2026-07-04] — Structural cleanup (Phase 5B, part 1)
+
+### Added
+- Structured `form` field in the `/chat` response (`"crush" | "contact" | null`) —
+  the frontend renders forms from the pipeline's state machines instead of
+  pattern-matching answer text
+
+### Changed
+- Orchestrator slimmed from 879 to ~300 lines: discovery hooks/pacing extracted to
+  `util_discovery_hooks.py`
+- Twilio/Resend read their config from the central settings object (one place env
+  vars are read)
+- CORS: strict origin allow-list when `FRONTEND_URL` is set (was wildcard +
+  credentials, a spec-invalid pair), logged permissive fallback otherwise
+
+### Removed
+- langgraph dependency: the Studio StateGraph was built at module import
+  (constructing network clients on every cold start, for visualization nobody
+  used); `chat_history` is now typed as the plain message list it is
+
+---
+
 ## [2026-07-04] — Code-level credibility (Phase 5, part 1)
 
 ### Added
