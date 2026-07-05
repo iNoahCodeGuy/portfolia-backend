@@ -137,11 +137,12 @@ def _handle_direct_requests(state: ConversationState) -> None:
     contact_requested = any(key in lowered for key in ["reach out", "contact me", "call me", "follow up"])
     data_requested = _is_data_display_request(lowered)
 
-    # Add actions based on what they asked for
+    # Add actions based on what they asked for.
+    # Resume email dispatch was removed with the role-based capture system —
+    # resume requests now route to the reach-out offer (Noah follows up
+    # directly), which the contact-capture flow handles.
     if resume_requested:
-        state["pending_actions"].append({"type": "send_resume"})
         state["pending_actions"].append({"type": "ask_reach_out"})
-        state["pending_actions"].append({"type": "notify_resume_sent"})
         state["offer_sent"] = True
 
     if linkedin_requested:
