@@ -189,7 +189,13 @@ def get_portfolia_response(query: str) -> str:
         chat_history=[
             {"role": "assistant", "content": "Hi! I'm Portfolia, Noah's AI portfolio assistant."},
             {"role": "user", "content": "I'm a software developer"}
-        ]
+        ],
+        # Model a session past the scripted welcome turn — otherwise stage2
+        # answers every eval question with the static role-welcome template
+        # (same modeling as test_conversation_flow.py's hermetic sessions).
+        session_memory={
+            "persona_hints": {"role_welcome_shown": True, "role_mode": "software_developer"}
+        },
     )
 
     result = run_conversation_flow(state, rag_engine, "test-session-quality")

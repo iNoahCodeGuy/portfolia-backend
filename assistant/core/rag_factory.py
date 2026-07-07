@@ -24,6 +24,13 @@ class RagEngineFactory:
     No longer supports FAISS fallback - all operations use Supabase.
     """
     def __init__(self, settings=None):
+        # Default to the real settings singleton: a bare RagEngineFactory()
+        # otherwise passes anthropic_api_key=None into ChatAnthropic, which
+        # fails validation and silently swaps in the degraded-mode LLM
+        # (every edge-case response became a canned fallback).
+        if settings is None:
+            from assistant.config.supabase_config import supabase_settings
+            settings = supabase_settings
         self.settings = settings
         self.degraded_mode = False
 

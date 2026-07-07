@@ -46,7 +46,7 @@ def _get_welcome_message(role_mode: str) -> str:
 
             **Response Time Analysis** -- No quick way to test whether response time differences are real or noise. A Streamlit app with statistical hypothesis testing and time-series visualization.
 
-            **Lead Response Heatmap** -- Sales teams can't see when leads go unanswered. A reusable Python dashboard using pandas and matplotlib to visualize coverage gaps.
+            **Lead Response Heatmap** -- Sales teams can't see when leads go unanswered. A reusable Streamlit dashboard using pandas and Plotly to visualize coverage gaps.
 
             Pick one and I'll walk you through the architecture decisions."""),
 

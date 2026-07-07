@@ -77,5 +77,5 @@ def _throttle_links(answer: str, chat_history: list) -> str:
 
 # Resume and profile constants
 RESUME_DOWNLOAD_URL = "https://noahsaiassistant.vercel.app/resume/Noah_Delacalzada_Resume.pdf"
-LINKEDIN_URL = "https://www.linkedin.com/in/noah-delacalzada"
+LINKEDIN_URL = "https://www.linkedin.com/in/noah-de-la-calzada-250412358/"
 GITHUB_URL = "https://github.com/iNoahCodeGuy"
